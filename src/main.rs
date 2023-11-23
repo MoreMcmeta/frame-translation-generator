@@ -101,11 +101,11 @@ struct FrameTranslationGenerator {
     y: u32,
 
     /// Width of a frame in the image
-    #[arg(value_parser = parse_positive_int, long = "fw")]
+    #[arg(value_parser = parse_positive_int, long = "frame-width")]
     frame_width: u32,
 
     /// Height of a frame in the image
-    #[arg(value_parser = parse_positive_int, long = "fh")]
+    #[arg(value_parser = parse_positive_int, long = "frame-height")]
     frame_height: u32,
 
     /// Height of a frame in the image
