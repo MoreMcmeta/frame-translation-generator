@@ -1,0 +1,113 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version number
+        required: true
+      changelog:
+        description: Changelog
+        required: true
+      draft:
+        type: boolean
+        description: Draft?
+        required: true
+      prerelease:
+        type: boolean
+        description: Prerelease?
+        required: true
+
+env:
+  PROJ_NAME: frame-translation-generator
+
+jobs:
+  create_release:
+    name: Create release
+    environment: release
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      
+    steps:
+      - name: Create release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          release_name: Release ${{ github.event.inputs.version }}
+          body: ${{ github.event.inputs.changelog }}
+          draft: ${{ github.event.inputs.draft }}
+          prerelease: ${{ github.event.inputs.prerelease }}
+
+  build:
+    name: Build and upload
+    environment: release
+    needs: create_release
+    permissions:
+      contents: write
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            extension: ""
+            description: ARM64 Linux
+          - os: ubuntu-latest
+            target: i686-unknown-linux-gnu
+            extension: ""
+            description: 32-bit Linux
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            extension: ""
+            description: 64-bit Linux
+          - os: windows-latest
+            target: i686-pc-windows-msvc
+            extension: .exe
+            description: 32-bit Windows
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            extension: .exe
+            description: 64-bit Windows
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            extension: ""
+            description: 64-bit macOS
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Toolchain
+        uses: actions-rs/toolchain@v1.0.6
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+
+      - name: Build
+        uses: actions-rs/cargo@v1.0.1
+        with:
+          use-cross: true
+          command: build
+          args: --release --target=${{ matrix.target }}
+
+      - name: Zip release items
+        uses: papeloto/action-zip@v1
+        with:
+          files: README.md LICENSE.md target/${{ matrix.target }}/release/${{ env.PROJ_NAME }}${{ matrix.extension }}
+          recursive: true
+          dest: ${{ env.PROJ_NAME }} (${{ matrix.description }}).zip
+
+      - name: Upload build
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create_release.outputs.upload_url }} 
+          asset_path: ${{ env.PROJ_NAME }} (${{ matrix.description }}).zip
+          asset_name: ${{ env.PROJ_NAME }} (${{ matrix.description }}).zip
+          asset_content_type: application/zip
